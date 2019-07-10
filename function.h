@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <mntent.h>
 #include <unistd.h>
-#include <dirent.h>
+#include <dirent.h>     // diropen(), readdir()
 #include <stdlib.h>
 #include <stdarg.h>
 #include <time.h>
@@ -29,7 +29,8 @@ typedef enum _boolean {
 struct f_size
 {
     long blocks;
-    long avail; 
+    long avail;
+    long percent;
 };
 
 typedef struct _mountinfo 
@@ -52,7 +53,12 @@ boolean deleteFolder(char* folderName); // only Dir delete
 int delDirFile(const char* folder);     // file/dir delete
 int getRepoSize(char* targetPath);
 unsigned long getFsSize(char* targetPath, char* osType);
-unsigned long getDirSize();
+MOUNTP *getDirSize();
 int dfclose(MOUNTP *MP);
 MOUNTP *dfget(MOUNTP *MP);
 MOUNTP *dfopen();
+int searchDir(char *targetPath);
+int rmdirs(const char *path, int is_error_stop);
+char* searchOldDir(char* targetPath);
+char* getModiTime(char *targetPath);
+char* itoa(int integer);
