@@ -7,10 +7,12 @@
 
 //char* ROOT_FOLDER_PATH = "/workspace/blackbox/";
 char* ROOT_FOLDER_PATH = "/home/jk/workspace/blackbox/";
+char* ROOT_FOLDER_PATH2 = "/home/jk/workspace/blackbox";
 char REAL_TIME_FOLDER_PATH[256] = "";
 
-// 마운트 디바이스 고정주소
-const char *MMOUNT = "/proc/mounts";
+
+const char *MMOUNT = "/proc/mounts";    // 프로세스 마운트 디바이스 고정주소
+//const char *MMOUNT = "/etc/mtab";  // 현재 시스템의 마운트 정보
 
 // INNER Function
 boolean checkDirectory(char* folderPath);
@@ -32,7 +34,7 @@ char* getCurrentTime(char typeFlag)
     if(typeFlag == 'D')     // Date (YYYYMMDD)
         strftime(buff, TIME_BUFF_SIZE, "%Y%m%d", st_time);
     else if(typeFlag == 'T') // TIME (HH)
-        strftime(buff, TIME_BUFF_SIZE, "%Y%m%d-%H", st_time);
+        strftime(buff, TIME_BUFF_SIZE, "%Y%m%d%H", st_time);
     else    // currentTime      strftime(buff, TIME_BUFF_SIZE, "%Y%m%d-S%H%M%S-E%H%M%S", st_time);
         strftime(buff, TIME_BUFF_SIZE, "%H%M%S", st_time);
         
@@ -266,7 +268,7 @@ unsigned long getFsSize(char* targetPath, char* osType)
 }
 
 /*
-    * 파일객체 오픈
+    * 마운트 경로 정보 파일 오픈
 */
 MOUNTP *dfopen()
 {
@@ -283,7 +285,7 @@ MOUNTP *dfopen()
 }
 
 /*
-    * 파일시스템 내 파티션 정보를 추출한다
+    * 마운트 된 파일 시스템 정보 추출
 */
 MOUNTP *dfget(MOUNTP *MP)
 {
@@ -294,7 +296,6 @@ MOUNTP *dfget(MOUNTP *MP)
     struct stat lstat; 
     int is_root = 0;
 
-    // /proc/mounts로 부터 마운트된 파티션의 정보를 얻어온다.
     while(fgets(buf, 255, MP->fp))
     {
         is_root = 0;
@@ -304,10 +305,11 @@ MOUNTP *dfget(MOUNTP *MP)
         {
             if (strstr(buf, MP->mountdir) && S_ISBLK(lstat.st_mode) || is_root)
             {
-                // 파일시스템의 총 할당된 크기와 사용량을 구한다.        
+                // 파일시스템의 총 할당된 크기(blocks)와 사용량(avail)을 구한다.        
                 statfs(MP->mountdir, &lstatfs);
                 MP->size.blocks = lstatfs.f_blocks * (lstatfs.f_bsize/1024); 
                 MP->size.avail  = lstatfs.f_bavail * (lstatfs.f_bsize/1024); 
+                MP->size.percent = ((double)MP->size.avail / (double)MP->size.blocks) * 100;
                 return MP;
             }
         }
@@ -325,9 +327,9 @@ int dfclose(MOUNTP *MP)
 }
 
 /*
-    * mntent를 사용하지 않은 파일시스템 사이즈 리턴
+    * mntent를 사용하지 않은 파일시스템 객체 리턴
 */
-unsigned long getDirSize()
+MOUNTP *getDirSize()
 {
     MOUNTP *MP;
     if ((MP=dfopen()) == NULL)
@@ -336,23 +338,158 @@ unsigned long getDirSize()
         return 1;
     }
     else if(dfget(MP))
-    {
-        printf("출력합니다 ::::: \n");
-        printf("%-14s%-20s%10lu%10lu\n", MP->mountdir, MP->devname, MP->size.blocks, MP->size.avail);
+        return MP;                                
+}
 
-        return MP->size.blocks;
-                                
-    }
+/*
+    * 디렉토리 / 하위 파일 삭제 함수
+    * param : 폴더 경로, 타입(1:디렉토리/파일삭제, 0:오류발생시 중단)
+    * 레퍼런스URL : https://downman.tistory.com/150
     
-    // while(1)
-    // {
-    //     while(dfget(MP))
-    //     {
-    //         printf("%-14s%-20s%10lu%10lu\n", MP->mountdir, MP->devname, 
-    //                             MP->size.blocks,
-    //                             MP->size.avail);
-    //     }
-    //     printf("=========================\n\n");
-    //     sleep(1);
-    // }
+    * COMMENT
+    * path 를 이용하여 DIR 객체 추출
+    * 최초 조회 DIR이 파일이면 삭제 후 종료
+    * 아닐 경우 DIR 의 readdir 함수를 이용하여 하나씩 읽기처리
+      파일이면 삭제, 디렉토리이면 재귀호출로 해당 디렉토리를 타켓으로 다시 처리
+*/
+int rmdirs(const char *path, int is_error_stop)
+{
+    DIR *  dir_ptr      = NULL;
+    struct dirent *file = NULL;
+    struct stat   buf;
+    char   filename[1024];
+
+    if((dir_ptr = opendir(path)) == NULL) {
+		return unlink(path);
+    }
+
+    while((file = readdir(dir_ptr)) != NULL) {
+        if(strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) {
+             continue;
+        }
+
+        sprintf(filename, "%s/%s", path, file->d_name);
+
+        if(lstat(filename, &buf) == -1) {
+            continue;
+        }
+
+        if(S_ISDIR(buf.st_mode)) {
+            if(rmdirs(filename, is_error_stop) == -1 && is_error_stop) {
+                return -1;
+            }
+        } 
+        else if(S_ISREG(buf.st_mode) || S_ISLNK(buf.st_mode)) { // �Ϲ����� �Ǵ� symbolic link �̸�
+            if(unlink(filename) == -1 && is_error_stop) {
+                return -1;
+            }
+        }
+    }
+    closedir(dir_ptr);
+    return rmdir(path);
+}
+
+/*
+    * 하위 폴더 중 가장 오래된 폴더를 검색한다.
+    * parma : targetPath(대상 루트경로)
+    * return : 가장 오래된 폴더 path
+*/
+char* searchOldDir(char* targetPath)
+{
+    DIR *dirPtr = NULL;
+    struct dirent *file = NULL;
+    int oldTime = 0;
+    char *oldPath = malloc(sizeof(char)*256);
+    char buff[256] = "";
+
+    if((dirPtr = opendir(targetPath)) == NULL)
+    {
+        fprintf(stderr, "%s No Read Dir\n", targetPath);
+        return -1;
+    }
+    printf("##### 오래된 폴더를 검색하고 하위파일과 폴더를 삭제합니다...\n");
+    printf("기준 디렉토리 :: %s\n", targetPath);
+
+    while((file = readdir(dirPtr)) != NULL)
+    {
+        if((strlen(file->d_name)) >= 4)
+        {
+            printf("##### 검사 대상 파일명 :: %s\n", file->d_name);
+            strcpy(buff, targetPath);
+            strcat(buff, "/");
+            strcat(buff, file->d_name);
+            printf("##### 생성일을 조회할 타겟 폴더경로 :: %s\n", buff);
+
+            // 디렉토리 폴더의 생성 시각을 조회(YYYYMMDDHH)
+            char *dBuff = malloc(sizeof(char) * TIME_BUFF_SIZE);
+            dBuff = getModiTime(buff);
+            printf("dBuff :: %s\n", dBuff);
+            printf("strlen(oldPath) :: %d\n", strlen(oldPath));
+
+            // 생성일 비교 기준을 위하여 첫번째 데이터 입력
+            if(strlen(oldPath) <= 0)
+            {
+                strcpy(oldPath, buff);
+                oldTime = atoi(dBuff);
+                printf("생성일 비교 첫번째 데이터 입력 :: %d\n", oldTime);
+            }
+            else
+            {
+                /* 폴더 간 날자비교 */
+                int timeOne = oldTime;
+                int timeTwo = atoi(dBuff);
+
+                printf("비교할 두개의 날자정보\n");
+                printf("%d\n", timeOne);
+                printf("%d\n", timeTwo);
+
+                if(timeOne > timeTwo)
+                {
+                    strcpy(oldPath, buff);
+                    oldTime = timeTwo;
+                }
+            }
+
+            // malloc init
+            free(dBuff);
+        }
+        
+    }
+    closedir(dirPtr);
+    
+    printf("기준 폴더 내 가장 오래된 폴더명 :: %s\n", oldPath);
+    printf("기준 폴더 내 가장 오래된 파일시간 :: %d\n", oldTime);
+
+    return oldPath;
+}
+
+/*
+    * itoa 구현 (int to char)
+    * param : int value
+    * return : char
+*/
+char* itoa(int integer)
+{
+    return ((char*)integer);
+}
+
+/*
+    * 해당 폴더의 생성시간정보를 리턴한다.
+    * param : 생성시간정보를 조회할 폴더 경로
+    * return : 생성시간정보(char*)
+*/
+char* getModiTime(char *targetPath)
+{
+    struct stat sb;
+    struct tm *locTime;
+    char* buff = malloc(sizeof(char)*TIME_BUFF_SIZE);
+
+    if(stat(targetPath, &sb) != -1)
+    {
+        locTime = localtime(&sb.st_ctime);   
+        strftime(buff, TIME_BUFF_SIZE, "%Y%m%d%H", locTime);
+    }
+    printf("생성일을 조회할 대상 폴더 :: %s\n", targetPath);
+    printf("이 폴더의 생성날자는 다음과 같습니다.:: %s\n", buff);
+    return buff;
 }
