@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <time.h>
 #include <errno.h>
+#include <termios.h>
 
 // #ifndef FUNCTION_H
 // #define FUNCTION_H
@@ -62,3 +63,4 @@ int rmdirs(const char *path, int is_error_stop);
 char* searchOldDir(char* targetPath);
 char* getModiTime(char *targetPath);
 char* itoa(int integer);
+int getch(void);
