@@ -493,3 +493,21 @@ char* getModiTime(char *targetPath)
     printf("이 폴더의 생성날자는 다음과 같습니다.:: %s\n", buff);
     return buff;
 }
+
+int getch(void)
+{
+    int ch;
+    struct termios buf;
+    struct termios save;
+
+    tcgetattr(0, &save);
+    buf = save;
+    buf.c_lflag &= (ICANON|ECHO);
+    buf.c_cc[VMIN] = 1;
+    buf.c_cc[VTIME] = 0;  
+    tcsetattr(0, TCSAFLUSH, &buf);  
+    ch = getchar();  
+    tcsetattr(0, TCSAFLUSH, &save);  
+
+    return ch;  
+}
