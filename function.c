@@ -111,7 +111,7 @@ boolean deleteFolder(char* folderName)
 /*
     * checkDir
     * param : check stat folderPath
-    * return : usedFolder(FALSE), unusedFolder(TRUE)
+    * return : 폴더가 존재하면(FALSE), 폴더가 존재하지않으면(TRUE)
 */
 boolean checkDirectory(char* folderPath)
 {
@@ -545,5 +545,75 @@ void deleteProc(void* data)
 
 
         sleep(10);
+    }
+}
+
+/*
+    *   폴더 생성 및 녹화 쓰레드 펑션
+ */
+void runRecProc(void* data)
+{
+    boolean flag = FALSE;       // Dir Create Flag  
+    int retCode;
+    int loopCount = 1;
+    while(1)
+    {
+        // 1. 현재 시간조회 param(D:yyyymmdd, T:HH(hour), S:YYYYMMDD_HHMMSS)
+        char* currTime = getCurrentTime('T');
+
+        // 2. 현재 시간에 해당하는 폴더가 존재하는지 확인
+        char* chkPath;
+        strcpy(chkPath, ROOT_FOLDER_PATH);
+        strcat(chkPath, currTime);
+        
+        // 폴더가 존재하지않은경우
+        if(TRUE == checkDirectory(chkPath))
+        {
+            // 3. 폴더를 생성한다.
+            flag = createFolder(currTime);
+            
+            if(flag == FALSE)       // 폴더 생성 실패 시
+            {
+                /*
+                    * NOT COMPLETE  
+                    * DELETE USED DIR 190702
+                */
+
+                printf("##### 폴더 생성에 실패하였습니다. 이전폴더를 삭제합니다. \n");
+                int chkFlag = 0;
+                chkFlag = delDirFile(currTime);
+
+                // 폴더 삭제 실패
+                if(chkFlag != 1){ printf("##### %s 폴더 삭제 실패!! \n", currTime); exit(0); }
+            }
+            else // 폴더 생성 성공 시
+            {
+                printf("##### 폴더 생성을 완료하였습니다.!!\n");
+
+                /*
+                    ************************************
+                    3. REC .py 외부 라이브러리 호출
+                    PARAM : 녹화시간(int/sec), 저장경로(--path)
+                    ************************************
+                */
+                printf("##### %d 회차 녹화를 시작합니다. #####\n", loopCount);
+                loopCount++;
+
+                // system 함수에 전달할 문자열 formatting
+                char* argStr;
+                sprintf(argStr, "python /home/nvidia/test/jk/rec_video.py --path=%s", currTime);
+                retCode = system(argStr);
+                if(retCode != 0)
+                {
+                    perror(".py systemCall Error!!");
+                    exit(0);
+                }
+                else
+                {
+                    printf("##### REC Call 실행하였습니다.\n");
+                    sleep(600);
+                }
+            }
+        }
     }
 }
