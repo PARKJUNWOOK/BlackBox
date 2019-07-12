@@ -37,7 +37,7 @@ int main()
     thrId = pthread_create(&pThread[0], NULL, deleteProc, (void*)th1);
     if(thrId < 0)
     {
-        perror("pThread[0] Thread 생성에 실패하였습니다!!\n");
+        perror("pThread[0](deleteProc) Thread 생성에 실패하였습니다!!\n");
         exit(0);
     }
     pthread_join(pThread[0], (void **)&status);
@@ -77,12 +77,40 @@ int main()
         - 폴더생성 및 REC는 폴더생성이 일어난 뒤 REC를 수행해야함
         ************************************
      */
-    boolean flag = FALSE;       // Dir Create Flag   
+
+    /*
+        * 쓰레드 버전
+        * 폴더 생성 후 녹화 수행
+     */
+    //void runRecProc(void* data)
+    thrId = pthread_create(&pThread[1], NULL, runRecProc, (void*)th2);
+    if(thrId < 0)
+    {
+        perror("pThread[1](runRecProc) Thread 생성에 실패하였습니다!!\n");
+        exit(0);
+    }
+    pthread_join(pThread[1], (void **)&status);
+
+    /*
+        * 일반 함수 버전 ( 크론탭 사용 시 활성화 )
+        * 폴더 생성 후 녹화 수행
+     */
+    boolean flag = FALSE;       // Dir Create Flag 
+    int count=1;
+    int retCode;  
     while(flag != TRUE)
     {
-        // 1. getCurrentTime() param(D:yyyymmdd, T:HH(hour), S:YYYYMMDD_HHMMSS)
+        // 1. 현재 시간조회 param(D:yyyymmdd, T:HH(hour), S:YYYYMMDD_HHMMSS)
         char* currTime = getCurrentTime('T');
-        // 2. createDir
+
+        // 2. 현재 시간에 해당하는 폴더가 존재하는지 확인
+        char* chkPath;
+        strcpy(chkPath, ROOT_FOLDER_PATH);
+        strcat(chkPath, currTime);
+        // 폴더가 존재 하므로 생성 과정을 종료한다.
+        if(FALSE == checkDirectory(chkPath)){chkPath = NULL; break;}            
+
+        // 3. 폴더를 생성한다.
         flag = createFolder(currTime);
         
         if(flag == FALSE)       // 폴더 생성 실패 시
@@ -92,22 +120,16 @@ int main()
                 * DELETE USED DIR 190702
             */
 
-            printf("##### This Folder Used... delete Folder and new Create Folder \n");
-            
-            // folder delete and new Create Folder
+            printf("##### 폴더 생성에 실패하였습니다. 이전폴더를 삭제합니다. \n");
             int chkFlag = 0;
             chkFlag = delDirFile(currTime);
-            printf("chkFlag :: %d\n", chkFlag);
 
-            if(chkFlag != 1)
-            {
-                printf("##### Dir Delete Error!! \n");
-                exit(0);
-            }
+            // 폴더 삭제 실패
+            if(chkFlag != 1){ printf("##### %s 폴더 삭제 실패!! \n", currTime); exit(0); }
         }
-        else        // 폴더 생성 성공 시
+        else // 폴더 생성 성공 시
         {
-            printf("##### CreateFolder Success!!\n");
+            printf("##### 폴더 생성을 완료하였습니다.!!\n");
 
             /*
                 ************************************
@@ -115,33 +137,28 @@ int main()
                 PARAM : 녹화시간(int/sec), 저장경로(--path)
                 ************************************
             */
-           
-           int key;
-           int count = 1;
-           int retCode;
-           do
-           {
-                // int ch;  
-                // for(; !(ch=='\n');){  
-                //     ch = getch();  
-                //     printf("키 입력을 감지했습니다. 프로그램을 종료합니다. \n", ch);
-                //     exit(0);
-                // }
+            printf("##### %d 회차 녹화를 시작합니다. #####\n", count);
+            count++;
 
-                printf("##### %d 회차 녹화를 시작합니다. #####\n", count);
-                count++;
-                retCode = system("python /home/nvidia/test/rec_video.py");
-                if(retCode != 0)
-                {
-                    perror(".py systemCall Error!!");
-                    exit(0);
-                }
+            // system 함수에 전달할 문자열 formatting
+            char* argStr;
+            sprintf(argStr, "python /home/nvidia/test/jk/rec_video.py --path=%s", currTime);
+            retCode = system(argStr);
 
+            retCode = system(argStr);
+            if(retCode != 0)
+            {
+                perror(".py systemCall Error!!");
+                exit(0);
+            }
+            else
+            {
+                printf("##### REC Call 실행하였습니다.\n");
                 sleep(600);
-           } while (1);
-           
+            }
         }   
-    }
+    }   // end while
+
     return 0;
 }
 
