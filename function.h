@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <libgen.h>
@@ -18,6 +19,8 @@
 // #ifndef FUNCTION_H
 // #define FUNCTION_H
 // #endif
+
+#define NUM_THREADS     3
 
 /*
     * 구조체 정의부
@@ -64,3 +67,4 @@ char* searchOldDir(char* targetPath);
 char* getModiTime(char *targetPath);
 char* itoa(int integer);
 int getch(void);
+void deleteProc(void* data);
