@@ -68,3 +68,4 @@ char* getModiTime(char *targetPath);
 char* itoa(int integer);
 int getch(void);
 void deleteProc(void* data);
+void runRecProc(void* data);
