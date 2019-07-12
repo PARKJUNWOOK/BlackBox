@@ -18,8 +18,34 @@ int main()
     /*
         ************************************
         1. 마운트 디바이스 검사 (연결체크, 용량체크)
-        - 별도 쓰레드로 러닝
+        - 별도 쓰레드로 러닝하는 방법
+        - 쓰레드로인하여 전체프로세스가 죽는것을 방지하기위해서는 삭제.c를 따로 배치러닝시킨다
         ************************************
+     */
+
+    /*
+        * Thread 버전
+        * 용량 체크 후 삭제 로직 수행 판별 
+     */
+    pthread_t pThread[NUM_THREADS];
+    int thrId;
+    int status;
+    char th1[] = "##### Delete Thread #####";
+    char th2[] = "##### Video Rec Thread #####";
+
+    //void deleteProc(void* data)
+    thrId = pthread_create(&pThread[0], NULL, deleteProc, (void*)th1);
+    if(thrId < 0)
+    {
+        perror("pThread[0] Thread 생성에 실패하였습니다!!\n");
+        exit(0);
+    }
+    pthread_join(pThread[0], (void **)&status);
+
+
+    /*
+        * 일반 함수 버전
+        * 해당 함수를 별도의 파일로 생성하여 crontab 을 이용하여 매시간 실행시킨다
      */
     // MOUNTP *mntSize = getDirSize();     
     // printf("현재 마운트 드라이브의 사용량은 %d %% 입니다.\n", mntSize->size.percent);
@@ -48,7 +74,7 @@ int main()
     /*
         ************************************
         2. 폴더 생성
-        - 폴더생성과 REC는 폴더생성이 일어난 뒤 REC를 수행해야함
+        - 폴더생성 및 REC는 폴더생성이 일어난 뒤 REC를 수행해야함
         ************************************
      */
     boolean flag = FALSE;       // Dir Create Flag   
@@ -66,18 +92,18 @@ int main()
                 * DELETE USED DIR 190702
             */
 
-            // printf("##### This Folder Used... delete Folder and new Create Folder \n");
+            printf("##### This Folder Used... delete Folder and new Create Folder \n");
             
-            // // folder delete and new Create Folder
-            // int chkFlag = 0;
-            // chkFlag = delDirFile(currTime);
-            // printf("chkFlag :: %d\n", chkFlag);
+            // folder delete and new Create Folder
+            int chkFlag = 0;
+            chkFlag = delDirFile(currTime);
+            printf("chkFlag :: %d\n", chkFlag);
 
-            // if(chkFlag != 1)
-            // {
-            //     printf("##### Dir Delete Error!! \n");
-            //     exit(0);
-            // }
+            if(chkFlag != 1)
+            {
+                printf("##### Dir Delete Error!! \n");
+                exit(0);
+            }
         }
         else        // 폴더 생성 성공 시
         {
@@ -95,15 +121,16 @@ int main()
            int retCode;
            do
            {
-                int ch;  
-                for(; !(ch=='\n');){  
-                    ch = getch();  
-                    printf("키 입력을 감지했습니다. 프로그램을 종료합니다. \n", ch);
-                    exit(0);
-                }
+                // int ch;  
+                // for(; !(ch=='\n');){  
+                //     ch = getch();  
+                //     printf("키 입력을 감지했습니다. 프로그램을 종료합니다. \n", ch);
+                //     exit(0);
+                // }
 
                 printf("##### %d 회차 녹화를 시작합니다. #####\n", count);
-                retCode = system("python /home/jk/workspace/blackbox/hello.py");
+                count++;
+                retCode = system("python /home/nvidia/test/rec_video.py");
                 if(retCode != 0)
                 {
                     perror(".py systemCall Error!!");
@@ -115,7 +142,6 @@ int main()
            
         }   
     }
-
     return 0;
 }
 
